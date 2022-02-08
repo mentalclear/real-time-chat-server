@@ -5,6 +5,7 @@ import * as admin from 'firebase-admin';
 import socketIo from 'socket.io';
 import credentials from './credentials.json';
 import { db } from './db';
+import { getConversation } from './db';
 import bodyParser from "body-parser";
 
 admin.initializeApp({
@@ -30,9 +31,35 @@ const io = socketIo(server, {
     }
 });
 
+io.use(async (socket, next) => {
+    console.log('Verifying user auth token...');
+    if (!socket.handshake.query || !socket.handshake.query.token) {
+        socket.emit('error', 'You need to include an auth token');
+    }
+
+    // Added this so it doesn't crash... will need to figure this out.
+    if (socket.handshake.query.token) {
+        const user = await admin.auth().verifyIdToken(socket.handshake.query.token);
+        socket.user = user;
+    }
+
+    next();
+});
+
 io.on('connection', async socket => {
-    console.log("A new client has connected to socket.io");
-    console.log(socket.handshake.query.conversationId);
+    const { conversationId } = socket.handshake.query;
+    console.log('A new client connected to socket.io!');
+    io.emit('userJoined', socket.user);
+    const conversation = await getConversation(conversationId)
+    socket.emit('heresYourConversation', conversation);
+
+    socket.on('postMessage', () => {
+        // make sure user is memeber
+        // add their message to the conversation
+        // get the updated conversation
+        //  emit an event 
+    })
+
     socket.on('disconnect', () => {
         console.log('Client disconnected');
     });
