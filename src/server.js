@@ -4,8 +4,12 @@ import { routes, protectRouteMiddleware } from "./routes";
 import * as admin from 'firebase-admin';
 import socketIo from 'socket.io';
 import credentials from './credentials.json';
-import { db } from './db';
-import { getConversation } from './db';
+import { 
+    db,
+    addMessageToConversation,
+    getCanUserAccessConversation,
+    getConversation 
+} from './db';
 import bodyParser from "body-parser";
 
 admin.initializeApp({
@@ -53,11 +57,14 @@ io.on('connection', async socket => {
     const conversation = await getConversation(conversationId)
     socket.emit('heresYourConversation', conversation);
 
-    socket.on('postMessage', () => {
-        // make sure user is memeber
-        // add their message to the conversation
-        // get the updated conversation
-        //  emit an event 
+    socket.on('postMessage', async ({ text, conversationId }) => {
+        const { user_id: userId } = socket.user;
+        const userIsAuthorized = await getCanUserAccessConversation(userId, conversationId);
+        if (userIsAuthorized){
+            await addMessageToConversation(text, userId, conversationId);
+            const updatedConersation = await getConversation(conversationId);
+            io.emit('messagesUpdated', updatedConersation.messages);            
+        }    
     })
 
     socket.on('disconnect', () => {
